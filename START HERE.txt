@@ -1,0 +1,254 @@
+====================================================================
+CLIPFORGE - START HERE
+Everything you need to do before it runs on its own.
+Updated: 2026-07-15 (late)
+====================================================================
+
+The build is finished. ClipForge already does the whole job: pulls a
+video from a link, transcribes it, picks the clips, cuts them vertical,
+burns the captions, writes the titles, and queues them for YouTube,
+TikTok and Instagram. It does all of that right now, tonight, for free,
+on this PC.
+
+The only thing it will not do yet is press send.
+
+This file is the complete list of what stands between here and it
+posting on its own. Nothing on this list is code. It is all yours,
+because it is all logins and money and permission - the things I can't
+and shouldn't do for you.
+
+There is no file to place, no folder to find, no JSON to edit. It is
+forms on a page.
+
+
+####################################################################
+#  THE SHORT VERSION
+####################################################################
+
+  1. Fill in Channel .................. 2 min    do this FIRST
+  2. Connect YouTube .................. 5 min    posts for real same day
+  3. Connect TikTok ................... 5 min    posts PRIVATE only for 2-4 weeks
+  4. Paste your video links ........... 1 min
+  5. Turn on live posting ............. tell me, 1 min of my time
+
+  Instagram is a separate, slower track. Start it when you have the
+  patience: Business account + Facebook Page + Meta review (2-4 weeks)
+  + a few dollars a month for storage.
+
+
+####################################################################
+#  STEP 0 - START IT
+####################################################################
+
+Double-click:  START_CLIPFORGE.bat
+Your browser opens:  http://127.0.0.1:8000
+Across the top:  Sources | Channel | Accounts
+
+
+####################################################################
+#  STEP 1 - CHANNEL   (2 minutes, and it matters more than it looks)
+####################################################################
+
+Click "Channel". Fill it in honestly.
+
+This is not decoration. It is what ClipForge uses to decide WHICH
+moments become clips. Right now it knows nothing about you, so it picks
+whatever seems generally interesting - which is exactly how you get
+clips that are fine but aren't yours.
+
+The two boxes that do the work:
+
+  "What is this channel about?"
+      Be specific. Not "interviews" but "long-form fighter interviews
+      cut down to the moments where they say something they regret."
+      The vaguer this is, the more generic your clips will be.
+
+  "Never clip anything about"
+      A hard block. Use it.
+
+Your handle goes on every clip and in every caption.
+
+You can change this any time. New clips follow the new answer; clips
+already found don't re-shuffle.
+
+
+####################################################################
+#  STEP 2 - ACCOUNTS
+####################################################################
+
+Click "Accounts". Each platform shows a dot:
+
+    grey   nothing added yet
+    amber  details saved - needs your one Connect click
+    green  done, it can post
+
+Nothing you type here is ever shown back on screen, written to the
+project's saved history, or sent anywhere except the platform it
+belongs to.
+
+
+  ----------------------------------------------------------------
+  YOUTUBE - do this one first, it is the only one with no waiting
+  ----------------------------------------------------------------
+  You already enabled the API. That was half of it. The other half:
+
+    1. console.cloud.google.com
+    2. APIs & Services  ->  Credentials
+    3. + CREATE CREDENTIALS  ->  OAuth client ID
+    4. Application type:  Desktop app  ->  Create
+    5. Click the download icon. You get a .json file.
+    6. Open it in Notepad, select all, copy.
+    7. Paste it into the YouTube box on the Accounts page. Save.
+    8. Click "Connect YouTube". Approve the Google screen.
+
+  Green dot. YouTube can post.
+
+  Worth knowing: YouTube's free quota is about 6 uploads a day.
+  ClipForge already knows this and holds the rest for tomorrow rather
+  than failing. You don't have to do anything about it.
+
+
+  ----------------------------------------------------------------
+  TIKTOK
+  ----------------------------------------------------------------
+  Make sure you are on developers.tiktok.com - the DEVELOPER site.
+  Not the normal TikTok app. If last night you only made a regular
+  TikTok account, that account is still needed (it's what gets posted
+  to), but the developer signup is the part that matters here.
+
+    1. Manage apps -> create an app
+    2. Add the product:   Content Posting API
+    3. Request the scope: video.publish
+    4. Redirect URI - paste exactly, no trailing slash:
+           http://127.0.0.1:8000/oauth/tiktok/callback
+    5. Copy the Client key and Client secret into the TikTok box. Save.
+    6. Click "Connect TikTok".
+
+  ** READ THIS - it is the one thing that might change your plans **
+
+  Until TikTok formally reviews your app, it can ONLY post private
+  videos that nobody but you can see, 5 a day. That is TikTok's rule
+  and there is no way around it. Public posting requires their audit:
+  2 to 4 weeks, usually several rounds of back and forth.
+
+  So TikTok will genuinely work tomorrow - privately. Which is a good
+  reason to start the audit early rather than last.
+
+  ** IF THE REDIRECT URI BOX REFUSES THAT ADDRESS **
+  Some portals demand https and reject 127.0.0.1. If that happens,
+  stop and tell me the exact wording of the error. Don't improvise a
+  different address - a wrong redirect URI doesn't fail now, it fails
+  later in a way that's genuinely confusing to unpick. I have a route
+  around it; I just need to know which wall you hit.
+
+
+  ----------------------------------------------------------------
+  INSTAGRAM - the long one. Leave it until the others are green.
+  ----------------------------------------------------------------
+  Before any developer steps, the account itself has to be right:
+
+    - It must be a PROFESSIONAL / BUSINESS account.
+      NOT Creator. The posting API refuses Creator accounts for Reels.
+      (Instagram app -> Settings -> Account type -> switch to Business)
+    - It must be linked to a Facebook Page.
+
+  Then:
+
+    1. developers.facebook.com -> My Apps -> Create App
+    2. Link it to that Facebook Page / Business account
+    3. Copy the App ID and App secret into the Instagram box
+    4. You also need your Instagram user ID (the numeric one)
+    5. Save, then Connect
+
+  Meta reviews the two permissions this needs and wants a screen
+  recording of the whole flow. 2 to 4 weeks, same as TikTok.
+
+
+  ----------------------------------------------------------------
+  CLIP STORAGE - Instagram only. Ignore until Instagram is approved.
+  ----------------------------------------------------------------
+  Instagram refuses to accept a video file. It insists on fetching the
+  clip from a public web address. Your clips live on this PC, so each
+  clip has to sit somewhere public for the ~60 seconds Instagram needs
+  to grab it, and then be deleted.
+
+  I built that. It's done and tested. It needs an S3-compatible
+  bucket - Cloudflare R2 is the cheap one, roughly a few dollars a
+  month.
+
+  I have NOT signed up for anything. That is your card and your call,
+  so it waits for you.
+
+  Until it's set up, Instagram posts simply wait in the queue.
+  Nothing else is affected. YouTube and TikTok don't need this at all.
+
+
+####################################################################
+#  STEP 3 - THE VIDEOS
+####################################################################
+
+Sources page, top box: "Pull a source from a link".
+
+Paste a video link, choose the rights type, say what your proof is,
+click Pull. It downloads here and gets clipped automatically. You can
+queue up as many as you like.
+
+The rights record is still required and still yours to be honest
+about. Only pull what you own or are licensed to repurpose. I can't
+check that for you and I'm not going to pretend otherwise.
+
+
+####################################################################
+#  STEP 4 - LET IT GO
+####################################################################
+
+Double-click:  RUN_PIPELINE.bat
+
+It transcribes, finds clips, renders and queues - forever, re-checking
+every 5 minutes. No clicks. Everything local and free.
+
+Right now it is in PRACTICE MODE: it records exactly what it WOULD
+post instead of posting. You can watch what it decided in
+data\mock_posts.log.
+
+When at least one account has a green dot, tell me and I'll add a
+one-click LIVE launcher. I deliberately haven't built that yet -
+there's nothing for it to point at until an account is connected, and
+a button that can't work is worse than no button.
+
+
+####################################################################
+#  IF YOU WANT TO CHECK MY WORK
+####################################################################
+
+Double-click:  CHECK_EVERYTHING.bat
+
+Runs every test I wrote and prints PASS or FAIL. It touches nothing
+real - no accounts, no posting, no your data. If something says FAIL,
+that is ClipForge catching itself, not your accounts breaking.
+
+
+####################################################################
+#  THE ONE THING I GENUINELY CANNOT DO FOR YOU
+####################################################################
+
+Every "Connect" click needs you, logged in as you, approving it on the
+platform's own screen. That is the entire point of that system. The
+only way around it would be me holding your passwords, which I won't
+do.
+
+It is a few clicks per platform, once, forever. After that ClipForge
+posts on its own and never asks you for anything again.
+
+
+####################################################################
+#  WHAT'S WHERE
+####################################################################
+
+  START HERE.txt ........ this file
+  START_CLIPFORGE.bat ... open the dashboard
+  RUN_PIPELINE.bat ...... let it clip on its own
+  CHECK_EVERYTHING.bat .. verify it all works
+  data\clips\ ........... your finished vertical clips
+  data\mock_posts.log ... what it would have posted, in practice mode
+  STATUS.txt ............ the technical log, for me. You don't need it.

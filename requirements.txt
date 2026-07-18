@@ -1,0 +1,11 @@
+fastapi==0.116.1
+faster-whisper==1.1.1
+httpx==0.28.1
+python-multipart==0.0.20
+tzdata==2026.3
+uvicorn[standard]==0.35.0
+yt-dlp==2026.7.4
+
+# Only needed for Instagram: it won't accept a file upload, so a clip is briefly
+# hosted on an S3-compatible bucket and deleted straight after.
+boto3==1.43.49

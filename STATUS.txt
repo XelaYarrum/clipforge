@@ -1,0 +1,119 @@
+CLIPFORGE PROJECT STATUS
+Updated: 2026-07-14
+
+Completed
+- Created the dedicated Desktop project folder.
+- Added a local FastAPI source-library dashboard.
+- Added a SQLite database created automatically at data/clipforge.db.
+- Added a double-click launcher: START_CLIPFORGE.bat.
+- The dashboard requires a rights/permission record before a source can be saved.
+- Verified that the dashboard loads and saves a source record; the test record
+  was removed afterward.
+- Independent local QA review: PASS.
+- Added source-file intake. It copies an allowed video type into data/media,
+  links it to one authorized source, and stores its file size and SHA-256 hash.
+- Verified intake using an isolated test video; no test data remains in your
+  actual Source Library.
+- Independent local QA review of the intake workflow: PASS.
+
+Completed 2026-07-15 (autonomous rebuild)
+- Piece 2 — local timestamped transcription (faster-whisper, word-level timestamps).
+  Auto-falls back to CPU because this PC's GPU lacks the CUDA cuBLAS DLLs. The app,
+  which was broken mid-write, now loads.
+- Piece 3 — clip finder. A FREE local model (north-64k via Ollama) scores 20-90s
+  transcript windows and stores the best candidates (score 60+). Nothing leaves the PC.
+- Piece 4 — vertical render. ffmpeg reframes the top clip to 1080x1920, burns big
+  short-form captions from the word timestamps, adds your channel handle. Verified by
+  eye on a rendered frame.
+- Piece 5 — quality gate. Deterministic checks (dimensions, duration, has video+audio)
+  reject a bad render before it counts as done.
+- Piece 6 — THE ONE SCRIPT: run.py. Double-click RUN_PIPELINE.bat and the free local
+  fleet drives every source transcribe -> find -> render -> QC with NO clicks, then
+  re-checks every 5 minutes. Idempotent and resumable. Verified end-to-end.
+
+How to use it now
+- Double-click START_CLIPFORGE.bat to open the dashboard and add + attach a licensed
+  source video (http://127.0.0.1:8000).
+- Double-click RUN_PIPELINE.bat to let it clip that video automatically.
+- Finished vertical clips appear in data\clips\ and play from the dashboard.
+
+Completed 2026-07-15 (piece 7 — posting, MOCK stage)
+- Piece 7 built and wired into run.py as STAGE 4. Default is MOCK: every finished
+  clip is queued for all three platforms, given a per-platform title/caption, and
+  recorded to data\mock_posts.log. Nothing is sent anywhere.
+- post\connectors.py — one shared contract (PostInterface) + mock and live
+  connectors per platform. The LIVE connectors deliberately refuse with a clear
+  message naming what's missing, rather than silently pretending to post.
+- post\metadata.py — per-platform title/caption inside each platform's real limits
+  (YouTube 100/5000, TikTok + Instagram 2200), with #shorts / #fyp / #reels.
+- post\scheduler.py — respects each platform's REAL posting cap:
+    TikTok    5 per rolling 24h (unaudited app)
+    Instagram 100 per rolling 24h
+    YouTube   6 uploads per CALENDAR day, resetting at midnight Pacific
+              (1,600 quota units per upload against a 10,000/day default)
+  Rolling and calendar are genuinely different code paths. A capped clip is
+  DEFERRED to its next eligible time, never dropped.
+- Verified: 15/15 scheduler + metadata checks against known answers, including a
+  discriminating case (the same 6 timestamps block TikTok but NOT YouTube, proving
+  the two window types aren't just the same counter twice).
+- Verified end-to-end on a throwaway DB: finished render -> queued -> mock-posted to
+  all 3 -> second pass correctly did NOT double-post. No test data reached the real
+  Source Library.
+- Added tzdata to requirements: Windows ships no timezone database, so the Pacific
+  reset could not resolve without it. Caught by the test, not by eye.
+
+Completed 2026-07-15 (late) — THE WHOLE THING, end to end
+- post\live.py — the REAL connectors, fully written, all three:
+    YouTube   resumable upload (session init -> PUT bytes -> video id)
+    TikTok    creator_info query -> publish/video/init (FILE_UPLOAD) -> PUT -> publish_id.
+              It ASKS the account which privacy levels are allowed rather than assuming
+              public, because an unaudited app only gets SELF_ONLY.
+    Instagram host clip -> create REELS container -> poll until FINISHED -> media_publish
+              -> delete the hosted file in a finally block.
+  They are inert ONLY because no credentials exist yet. Each names what it's missing.
+- post\oauth.py — full OAuth for all three, callbacks landing on the dashboard at
+  /oauth/<platform>/callback (matches the redirect URI the owner registers). CSRF state
+  checked. Tokens refresh automatically; expiry stored as an absolute time.
+- post\credentials.py — presence-only status. Secrets are never rendered or logged
+  (there's a test asserting the secret never appears in the page HTML).
+- post\hosting.py — the Instagram public-URL problem, SOLVED and pluggable. Any
+  S3-compatible bucket (R2/B2/S3). Clip goes up, IG fetches, clip comes down in a
+  finally. NOT signed up for anything — that's the owner's money, so it waits for him.
+  Unconfigured => Instagram posts DEFER; nothing else is affected.
+- profile.py + /channel page — the channel's context (niche, audience, tone, avoid,
+  handle, hashtags). Feeds BOTH the clip finder's scoring prompt (so it picks for THIS
+  channel, not for general interest) and the caption writer.
+- sources\puller.py + "Pull a source from a link" — yt-dlp intake. Calls yt-dlp via
+  sys.executable -m yt_dlp: it is NOT on this machine's PATH, so a bare `yt-dlp` would
+  have broken depending on how the launcher was started.
+- routes.py / pages.py — Accounts page (paste details, one Connect click, coloured
+  status dots) and Channel page. No file placement, no JSON editing, no dev steps.
+- Live-but-not-connected now DEFERS instead of failing: an unconnected platform is not
+  a broken clip. Verified — three platforms all waited, none marked failed.
+- CHECK_EVERYTHING.bat — one double-click runs all 3 suites and prints PASS/FAIL.
+  All green as of this commit.
+
+Exact next piece
+- NOTHING is blocked on code. It is blocked on the owner's clicks, per CONNECT_ACCOUNTS.txt:
+    Channel   — 2 minutes, and it changes which clips get picked. Do it first.
+    YouTube   — paste the OAuth client JSON + one Connect click. Closest to a real post.
+    TikTok    — client key/secret + Connect. Posts PRIVATE only (5/day) until TikTok's
+                audit passes (2-4 weeks). Worth starting the audit early.
+    Instagram — Business (not Creator) account + Facebook Page + Meta app + app review
+                (2-4 weeks). Longest road.
+    Storage   — Instagram only, ~a few $/month, needs his go. Until then IG defers.
+- After one account goes green: add a LIVE double-click (run.py --live-posting) so he
+  isn't typing flags. Deliberately not built yet — nothing to point it at.
+- Open question for the morning: TikTok's redirect URI may demand https and refuse
+  http://127.0.0.1:8000/oauth/tiktok/callback. If it does, that needs a route around
+  it (a tunnel or a hosted callback). Told him to report the exact error, not improvise.
+
+How to resume
+- Tell Codex: "Continue ClipForge from STATUS.txt."
+- Or double-click START_CLIPFORGE.bat to use the current source library.
+
+Safety rule
+- Only add videos that you own or have clear permission/license to repurpose.
+- No social-account posting credentials have been added to this project. Posting is
+  MOCK by default; it only goes live with run.py --live-posting, which needs those
+  credentials to exist first.
