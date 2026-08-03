@@ -1,4 +1,4 @@
-"""The three pages the owner actually touches: Accounts, Channel, Add-by-URL.
+"""The three pages Alexander actually touches: Accounts, Channel, Add-by-URL.
 
 Kept out of app.py because app.py is already the pipeline; this is just the parts
 with a human on the other end.

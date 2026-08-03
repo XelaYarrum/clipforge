@@ -6,7 +6,7 @@ import sys, tempfile, os, json
 from pathlib import Path
 from contextlib import closing
 
-sys.path.insert(0, r".")
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import app
 

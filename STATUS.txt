@@ -72,13 +72,13 @@ Completed 2026-07-15 (late) — THE WHOLE THING, end to end
               -> delete the hosted file in a finally block.
   They are inert ONLY because no credentials exist yet. Each names what it's missing.
 - post\oauth.py — full OAuth for all three, callbacks landing on the dashboard at
-  /oauth/<platform>/callback (matches the redirect URI the owner registers). CSRF state
+  /oauth/<platform>/callback (matches the redirect URI Alexander registers). CSRF state
   checked. Tokens refresh automatically; expiry stored as an absolute time.
 - post\credentials.py — presence-only status. Secrets are never rendered or logged
   (there's a test asserting the secret never appears in the page HTML).
 - post\hosting.py — the Instagram public-URL problem, SOLVED and pluggable. Any
   S3-compatible bucket (R2/B2/S3). Clip goes up, IG fetches, clip comes down in a
-  finally. NOT signed up for anything — that's the owner's money, so it waits for him.
+  finally. NOT signed up for anything — that's Alexander's money, so it waits for him.
   Unconfigured => Instagram posts DEFER; nothing else is affected.
 - profile.py + /channel page — the channel's context (niche, audience, tone, avoid,
   handle, hashtags). Feeds BOTH the clip finder's scoring prompt (so it picks for THIS
@@ -94,7 +94,7 @@ Completed 2026-07-15 (late) — THE WHOLE THING, end to end
   All green as of this commit.
 
 Exact next piece
-- NOTHING is blocked on code. It is blocked on the owner's clicks, per CONNECT_ACCOUNTS.txt:
+- NOTHING is blocked on code. It is blocked on Alexander's clicks, per CONNECT_ACCOUNTS.txt:
     Channel   — 2 minutes, and it changes which clips get picked. Do it first.
     YouTube   — paste the OAuth client JSON + one Connect click. Closest to a real post.
     TikTok    — client key/secret + Connect. Posts PRIVATE only (5/day) until TikTok's
@@ -108,9 +108,65 @@ Exact next piece
   http://127.0.0.1:8000/oauth/tiktok/callback. If it does, that needs a route around
   it (a tunnel or a hosted callback). Told him to report the exact error, not improvise.
 
+Completed 2026-08-02/03 — YOUR TWIN, and four things that were silently broken
+
+  New: twin\ — a Digital Human service. A typed brief becomes a finished 1080x1920
+  video narrated in a cloned voice. MEASURED end to end: 73 seconds.
+    twin\contract.py    VoiceProvider / FaceProvider. Nothing above this layer knows
+                        a vendor exists, so swapping one is a config row.
+    twin\registry.py    Picks a provider. Free+local first; a PAID provider is never
+                        selected automatically even when its key exists.
+    twin\voice_chatterbox.py  Chatterbox (MIT weights, commercial use allowed).
+                        1.24x realtime on the 5070 Ti, 3.21 GB VRAM, no cost per video.
+    twin\voice_elevenlabs.py  Wired, inert without a key. Not needed.
+    twin\face_footage.py      Real footage of him, looped to the narration. Free.
+    twin\face_lipsync.py      LatentSync. Installed at models\latentsync (9.6 GB).
+    twin\script.py      Local-fleet script writer. House style bans the phrases that
+                        read as machine-written; clean_for_speech strips what a voice
+                        model would read aloud as noise.
+    twin\compose.py     ffmpeg assembly, 3 layouts, WORD-LEVEL captions (the live word
+                        lights up). Captions are timed by transcribing ClipForge's own
+                        narration, so they cannot drift.
+    twin\screen.py      Built-in screen recording, GPU-encoded.
+    twin\series.py      One topic -> several different angles -> a video each.
+    twin\pipeline.py    Resumable per stage. A failed render does not re-speak the script.
+    fleet.py            Jobs ask for a ROLE. No file names a model any more.
+
+  BROKEN THINGS FOUND AND FIXED — none of these were in this file:
+  1. app.py hardcoded SCORING_MODEL = "north-64k", removed from the machine long ago.
+     score_window swallowed the error, so the clip finder reported "no clips found"
+     indefinitely rather than naming the missing model. THE CLIP FINDER HAD BEEN DEAD.
+  2. profile.py at the project root shadowed Python's stdlib `profile` module. The root
+     is sys.path[0] whenever ClipForge runs from its own folder, which RUN_PIPELINE.bat
+     does, so torch's import of cProfile got the channel profile and took the entire GPU
+     stack down. Renamed to channel.py. tests/test_twin.py now scans the root against
+     every stdlib name, and that check is proven to FAIL against the old layout.
+  3. All three test suites hardcoded a pre-move absolute path to the project. Every one
+     had failed to import since the folder moved, so CHECK_EVERYTHING.bat — the one
+     button that says whether ClipForge works — had been unable to say. Now relative.
+  4. faster-whisper was listed in requirements.txt but was not installed, and the CUDA
+     runtime libraries it needs were absent.
+
+  INSTALL TRAP, worth reading before touching the environment:
+  chatterbox-tts pins torch==2.6.0 and LatentSync pins torch==2.5.1. On this Blackwell
+  card either pin silently installs a PROCESSOR-ONLY torch. Nothing errors; it is simply
+  about twenty times slower forever. Always re-pin afterwards:
+      pip install --force-reinstall torch==2.11.0 torchaudio==2.11.0 \
+          --index-url https://download.pytorch.org/whl/cu128
+  and confirm with: python -c "import torch; print(torch.cuda.is_available())"
+
+  Twin videos enter the SAME posting queue as clipped ones, so platform rate caps count
+  them together. post_queue gained media_kind, migrated in place, existing rows kept.
+
+  Suites: 4 of 4 green (twin adds 88 checks).
+
+  STILL OWED BY HIM: about 25 seconds of his voice, and some presenter footage. Until
+  then the twin has nothing of him to work with. Everything else is done.
+
 How to resume
 - Tell Codex: "Continue ClipForge from STATUS.txt."
 - Or double-click START_CLIPFORGE.bat to use the current source library.
+- The twin lives at http://127.0.0.1:8000/twin
 
 Safety rule
 - Only add videos that you own or have clear permission/license to repurpose.

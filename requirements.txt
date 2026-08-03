@@ -9,3 +9,26 @@ yt-dlp==2026.7.4
 # Only needed for Instagram: it won't accept a file upload, so a clip is briefly
 # hosted on an S3-compatible bucket and deleted straight after.
 boto3==1.43.49
+
+# Transcription on the graphics card. faster-whisper needs the CUDA runtime DLLs
+# and Windows does not ship them; without these it falls back to the processor,
+# which is roughly ten times slower and gives no warning that it did.
+nvidia-cublas-cu12
+nvidia-cudnn-cu12
+
+# --- Your Twin: voice cloning on this PC -------------------------------------
+# Install these two LAST, and in this order:
+#
+#   pip install chatterbox-tts
+#   pip install --force-reinstall torch==2.11.0 torchaudio==2.11.0 \
+#       --index-url https://download.pytorch.org/whl/cu128
+#
+# The second command is not optional. chatterbox-tts pins torch==2.6.0, which on a
+# Blackwell card (RTX 50-series) resolves to a PROCESSOR-ONLY build. Everything
+# still runs, just about twenty times slower, and nothing reports an error — the
+# only symptom is that generating a minute of speech takes twenty minutes.
+#
+# torch is deliberately NOT pinned in this file: the correct build depends on the
+# graphics card, and a plain "pip install torch" fetches the wrong one.
+chatterbox-tts
+soundfile

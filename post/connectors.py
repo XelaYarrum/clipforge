@@ -2,7 +2,7 @@
 
 Every connector implements PostInterface. The MOCK connectors are the default and
 touch no network at all — they record what WOULD have been posted. The live
-connectors are deliberately unbuilt until the owner completes the one-time OAuth
+connectors are deliberately unbuilt until Alexander completes the one-time OAuth
 grant for that platform; they fail loudly rather than silently pretending.
 """
 

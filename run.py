@@ -105,7 +105,28 @@ def process_all(live_posting: bool = False):
         except Exception as e:
             print(f"error processing {title}: {e}")
 
-    # STAGE 4 — posting (mock unless --live-posting is passed)
+    # STAGE 4 — twin videos. Anything queued on the Twin page gets built here, so
+    # the same double-click that clips a podcast also finishes the videos he
+    # scripted. Runs BEFORE posting so a video queued this pass can post this pass.
+    try:
+        import channel as channel_profile
+        from twin import pipeline as twin_pipeline
+        from twin import store as twin_store
+
+        pending = twin_store.pending_videos(app.db_connection)
+        if pending:
+            handle = channel_profile.load(app.db_connection).get("handle", "")
+            print(f"twin stage… {len(pending)} video(s) queued")
+            for row in pending:
+                result = twin_pipeline.build(app.db_connection, row["id"], handle=handle)
+                if result["status"] == "done":
+                    print(f"  DONE -> {result['output_path']}")
+                else:
+                    print(f"  video {row['id']} stopped: {result.get('error')}")
+    except Exception as e:
+        print(f"error in twin stage: {e}")
+
+    # STAGE 5 — posting (mock unless --live-posting is passed)
     print("posting stage…")
     try:
         post_runner.process(live=live_posting)
@@ -126,7 +147,7 @@ def main():
 
     app.setup_database()
     mode = "LIVE posting" if args.live_posting else "MOCK posting"
-    print(f"ClipForge autonomous pipeline — transcribe -> find -> render -> post ({mode})")
+    print(f"ClipForge autonomous pipeline — transcribe -> find -> render -> twin -> post ({mode})")
 
     if args.once:
         process_all(live_posting=args.live_posting)

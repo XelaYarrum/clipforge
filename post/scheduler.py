@@ -35,12 +35,19 @@ CAPS = {
 }
 
 
+# What a queued item is a video OF. 'clip' rows point at renders.id, 'twin' rows
+# point at twin_videos.id. The two id spaces overlap, so the kind is part of the
+# uniqueness rule — without it, clip 5 and twin video 5 would be the same row.
+MEDIA_KINDS = ("clip", "twin")
+
+
 def setup_post_tables(connection) -> None:
     connection.execute(
         """
         CREATE TABLE IF NOT EXISTS post_queue (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             render_id INTEGER NOT NULL,
+            media_kind TEXT NOT NULL DEFAULT 'clip',
             platform TEXT NOT NULL,
             status TEXT NOT NULL DEFAULT 'pending',
             title TEXT NOT NULL,
@@ -50,11 +57,11 @@ def setup_post_tables(connection) -> None:
             error_message TEXT,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
-            UNIQUE (render_id, platform),
-            FOREIGN KEY (render_id) REFERENCES renders(id)
+            UNIQUE (media_kind, render_id, platform)
         )
         """
     )
+    _migrate_post_queue(connection)
     connection.execute(
         """
         CREATE TABLE IF NOT EXISTS post_log (
@@ -68,6 +75,52 @@ def setup_post_tables(connection) -> None:
     connection.execute(
         "CREATE INDEX IF NOT EXISTS idx_post_log_platform_at ON post_log (platform, posted_at)"
     )
+    connection.commit()
+
+
+def _migrate_post_queue(connection) -> None:
+    """Bring a pre-twin post_queue up to the current shape without losing a row.
+
+    An existing database has post_queue with no media_kind and UNIQUE(render_id,
+    platform). SQLite cannot alter a constraint in place, so the table is rebuilt
+    — but only when it is actually the old shape, and every existing row is
+    carried across as 'clip', which is what all of them are.
+    """
+    columns = {row["name"] for row in connection.execute("PRAGMA table_info(post_queue)")}
+    if "media_kind" in columns:
+        return
+
+    connection.execute(
+        """
+        CREATE TABLE post_queue_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            render_id INTEGER NOT NULL,
+            media_kind TEXT NOT NULL DEFAULT 'clip',
+            platform TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            title TEXT NOT NULL,
+            description TEXT,
+            post_id TEXT,
+            not_before TEXT,
+            error_message TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE (media_kind, render_id, platform)
+        )
+        """
+    )
+    connection.execute(
+        """
+        INSERT INTO post_queue_new
+            (id, render_id, media_kind, platform, status, title, description,
+             post_id, not_before, error_message, created_at, updated_at)
+        SELECT id, render_id, 'clip', platform, status, title, description,
+               post_id, not_before, error_message, created_at, updated_at
+        FROM post_queue
+        """
+    )
+    connection.execute("DROP TABLE post_queue")
+    connection.execute("ALTER TABLE post_queue_new RENAME TO post_queue")
     connection.commit()
 
 
@@ -129,33 +182,58 @@ def can_post(connection, platform: str, now: datetime | None = None):
     return False, _next_pacific_midnight(now)
 
 
-def enqueue(connection, render_id: int, platform: str, metadata: dict) -> None:
+def enqueue(connection, render_id: int, platform: str, metadata: dict,
+            media_kind: str = "clip") -> None:
+    if media_kind not in MEDIA_KINDS:
+        raise ValueError(f"unknown media kind {media_kind!r} — one of {MEDIA_KINDS}")
     stamp = _iso(_now())
     connection.execute(
         """
         INSERT OR IGNORE INTO post_queue
-            (render_id, platform, status, title, description, created_at, updated_at)
-        VALUES (?, ?, 'pending', ?, ?, ?, ?)
+            (render_id, media_kind, platform, status, title, description, created_at, updated_at)
+        VALUES (?, ?, ?, 'pending', ?, ?, ?, ?)
         """,
-        (render_id, platform, metadata["title"], metadata.get("description"), stamp, stamp),
+        (render_id, media_kind, platform, metadata["title"], metadata.get("description"),
+         stamp, stamp),
     )
     connection.commit()
 
 
 def due_items(connection, now: datetime | None = None):
-    """Pending queue rows whose deferral has expired."""
+    """Pending queue rows whose deferral has expired.
+
+    LEFT JOINs both tables and takes whichever path exists, so a clipped video and
+    a twin video queue, defer and post through exactly one code path. twin_videos
+    may not exist on an old database, hence the guard.
+    """
     now = now or _now()
-    return connection.execute(
+    has_twin = connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='twin_videos'"
+    ).fetchone() is not None
+
+    if has_twin:
+        query = """
+            SELECT post_queue.*,
+                   COALESCE(renders.output_path, twin_videos.output_path) AS output_path
+            FROM post_queue
+            LEFT JOIN renders ON renders.id = post_queue.render_id
+                             AND post_queue.media_kind = 'clip'
+            LEFT JOIN twin_videos ON twin_videos.id = post_queue.render_id
+                                 AND post_queue.media_kind = 'twin'
+            WHERE post_queue.status = 'pending'
+              AND (post_queue.not_before IS NULL OR post_queue.not_before <= ?)
+            ORDER BY post_queue.id
         """
-        SELECT post_queue.*, renders.output_path
-        FROM post_queue
-        JOIN renders ON renders.id = post_queue.render_id
-        WHERE post_queue.status = 'pending'
-          AND (post_queue.not_before IS NULL OR post_queue.not_before <= ?)
-        ORDER BY post_queue.id
-        """,
-        (_iso(now),),
-    ).fetchall()
+    else:
+        query = """
+            SELECT post_queue.*, renders.output_path
+            FROM post_queue
+            JOIN renders ON renders.id = post_queue.render_id
+            WHERE post_queue.status = 'pending'
+              AND (post_queue.not_before IS NULL OR post_queue.not_before <= ?)
+            ORDER BY post_queue.id
+        """
+    return connection.execute(query, (_iso(now),)).fetchall()
 
 
 def defer(connection, queue_id: int, until: datetime) -> None:

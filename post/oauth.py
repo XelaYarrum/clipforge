@@ -5,7 +5,7 @@ Every callback comes back to the dashboard itself:
 which is the redirect URI registered in each platform's developer portal. Keeping
 one redirect shape across all three means one thing to get right, not three.
 
-the owner clicks Connect once per platform. After that the tokens refresh on their
+Alexander clicks Connect once per platform. After that the tokens refresh on their
 own and nothing needs a human again.
 """
 

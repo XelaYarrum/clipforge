@@ -2,7 +2,7 @@
 
 Everything sits under config/credentials/, which is git-ignored. Nothing in here
 ever prints a secret's value — status() reports only presence, because the whole
-point is that the owner can see what's connected without the values leaking into
+point is that Alexander can see what's connected without the values leaking into
 a screenshot or a log.
 """
 

@@ -16,6 +16,8 @@ from urllib.parse import urlencode
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 
+import fleet
+
 APP_DIR = Path(__file__).resolve().parent
 DATA_DIR = APP_DIR / "data"
 DB_PATH = DATA_DIR / "clipforge.db"
@@ -32,8 +34,12 @@ RENDER_POOL = ThreadPoolExecutor(max_workers=1, thread_name_prefix="clipforge-re
 
 # The pipeline's own "brain" runs on the FREE local fleet (Ollama), so a running
 # ClipForge costs nothing and works offline.
-OLLAMA_CHAT_URL = "http://localhost:11434/api/chat"
-SCORING_MODEL = "north-64k"
+#
+# There is deliberately no model name here any more. This file used to hardcode
+# SCORING_MODEL = "north-64k"; that model was later removed from the machine, and
+# because score_window() swallowed every exception the clip finder reported "no
+# clips found" indefinitely instead of "that model is gone". fleet.py resolves a
+# ROLE against what is actually installed and says so out loud when it cannot.
 MIN_CLIP_SCORE = 60  # candidates below this are discarded
 
 
@@ -213,7 +219,8 @@ def index(request: Request) -> HTMLResponse:
     return page(
         f"""
 <h1>ClipForge</h1>
-<p class=\"lead\">Local short-form clipping workspace &nbsp;·&nbsp; <a href=\"/\">Sources</a> &nbsp;·&nbsp; <a href=\"/channel\">Channel</a> &nbsp;·&nbsp; <a href=\"/accounts\">Accounts</a></p>
+<p class=\"lead\">Local short-form clipping workspace &nbsp;·&nbsp; <a href=\"/\">Sources</a> &nbsp;·&nbsp; <a href=\"/twin\">Twin</a> &nbsp;·&nbsp; <a href=\"/channel\">Channel</a> &nbsp;·&nbsp; <a href=\"/accounts\">Accounts</a></p>
+{fleet_banner()}
 <div class=\"notice\"><strong>Rights-first:</strong> Every source needs a clear permission or license record before it enters the clip pipeline.</div>
 {f'<div class="notice"><strong>Upload issue:</strong> {html.escape(error_message)}</div>' if error_message else ''}
 <section>
@@ -260,6 +267,34 @@ def index(request: Request) -> HTMLResponse:
 </section>
 <section><h2>Source library ({len(sources)})</h2>{library}</section>
 """
+    )
+
+
+def fleet_banner() -> str:
+    """One line saying whether the local brain is answering.
+
+    This exists because the failure it reports used to be invisible: with the
+    scoring model gone, the only symptom was clip counts staying at zero. A
+    pipeline whose brain is missing should say so on the page, not in a log.
+    """
+    state = fleet.status()
+    if not state["installed"]:
+        return (
+            '<div class="notice" style="border-left-color:#f05252">'
+            f'<strong>The local model service isn\'t answering at {html.escape(state["host"])}.</strong> '
+            "Nothing can be scored or written until Ollama is running. Rendering and posting "
+            "still work.</div>"
+        )
+    problems = [r["error"] for r in state["roles"].values() if r["error"]]
+    if problems:
+        return (
+            '<div class="notice" style="border-left-color:#f0b429">'
+            f'<strong>Local model problem:</strong> {html.escape(problems[0])}</div>'
+        )
+    picks = ", ".join(f"{role} → {info['model']}" for role, info in state["roles"].items())
+    return (
+        f'<div class="notice"><strong>Running free and local.</strong> '
+        f'<span class="muted">{html.escape(picks)}</span></div>'
     )
 
 
@@ -522,30 +557,22 @@ SCORE_SYSTEM = (
 
 
 def score_window(text: str, channel_context: str = "") -> dict | None:
-    """Score one window with the free local model. Returns None on any failure."""
+    """Score one window on the free local model.
+
+    Returns None when THIS window could not be scored — a malformed answer, a
+    timeout. It deliberately does NOT catch a missing or unreachable model: that
+    is not a bad window, it is a broken fleet, and it must reach the caller.
+    """
     system = SCORE_SYSTEM
     if channel_context:
         system = f"{SCORE_SYSTEM}\n\nABOUT THIS CHANNEL: {channel_context}"
-    payload = {
-        "model": SCORING_MODEL,
-        "format": "json",
-        "stream": False,
-        "think": False,
-        "options": {"temperature": 0.2},
-        "messages": [
-            {"role": "system", "content": system},
-            {"role": "user", "content": "WINDOW TEXT: " + text[:4000]},
-        ],
-    }
-    request = urllib.request.Request(
-        OLLAMA_CHAT_URL,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
-    )
     try:
-        with urllib.request.urlopen(request, timeout=180) as response:
-            body = json.loads(response.read().decode("utf-8"))
-        parsed = json.loads(body["message"]["content"])
+        parsed = fleet.chat_json("score", system, "WINDOW TEXT: " + text[:4000])
+    except fleet.FleetError:
+        raise
+    except Exception:
+        return None
+    try:
         return {
             "score": int(parsed.get("score", 0)),
             "hook": str(parsed.get("hook", "")).strip(),
@@ -553,7 +580,7 @@ def score_window(text: str, channel_context: str = "") -> dict | None:
             "self_contained": bool(parsed.get("self_contained", False)),
             "risk_flags": parsed.get("risk_flags", []) or [],
         }
-    except Exception:
+    except (TypeError, ValueError):
         return None
 
 
@@ -571,7 +598,7 @@ def find_clip_candidates(source_id: int) -> None:
     stamp = datetime.now(UTC).isoformat()
 
     # Score for THIS channel when a profile exists, rather than for general interest.
-    import profile as channel_profile
+    import channel as channel_profile
 
     channel_context = channel_profile.scoring_context(channel_profile.load(db_connection))
 
@@ -848,6 +875,8 @@ def start_render(source_id: int = Form(...)) -> RedirectResponse:
     return RedirectResponse(url="/", status_code=303)
 
 
-# The human-facing pages live in routes.py. Imported LAST so every name above
-# (app, page, db_connection, ...) already exists when it binds its routes.
+# The human-facing pages live in routes.py and twin_routes.py. Imported LAST so
+# every name above (app, page, db_connection, ...) already exists when they bind
+# their routes.
 import routes  # noqa: E402,F401
+import twin_routes  # noqa: E402,F401

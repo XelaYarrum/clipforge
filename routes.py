@@ -2,7 +2,7 @@
 and pulling a source straight from a URL.
 
 Imported at the BOTTOM of app.py, so `from app import ...` here is resolved by then.
-Everything in this file has the owner on the other end of it, which is why the
+Everything in this file has Alexander on the other end of it, which is why the
 failures are sentences rather than status codes.
 """
 
@@ -19,7 +19,7 @@ from fastapi import Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 import pages
-import profile as channel_profile
+import channel as channel_profile
 from app import (
     CLIP_POOL,
     MEDIA_DIR,

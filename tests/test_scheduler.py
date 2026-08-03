@@ -2,8 +2,13 @@
 import sqlite3
 import sys
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
-sys.path.insert(0, r".")
+# Relative to THIS file, never an absolute path. All three suites used to hardcode
+# one machine's full path to the project. The folder was later moved, and every
+# suite silently failed to import from then on — while CHECK_EVERYTHING.bat went on
+# being the thing that says whether ClipForge works.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from post import scheduler, metadata
 from post.scheduler import PACIFIC

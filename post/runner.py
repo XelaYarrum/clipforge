@@ -29,7 +29,7 @@ _WAITING_ON_SETUP = _waiting_on_setup_errors() or (RuntimeError,)
 
 def queue_finished_renders() -> int:
     """Put every completed render into the post queue, once per platform."""
-    import profile as channel_profile
+    import channel as channel_profile
 
     added = 0
     prof = channel_profile.load(app.db_connection)
@@ -48,7 +48,8 @@ def queue_finished_renders() -> int:
         for render in renders:
             for platform in PLATFORMS:
                 exists = c.execute(
-                    "SELECT 1 FROM post_queue WHERE render_id = ? AND platform = ?",
+                    "SELECT 1 FROM post_queue WHERE render_id = ? AND platform = ?"
+                    " AND media_kind = 'clip'",
                     (render["id"], platform),
                 ).fetchone()
                 if exists:
@@ -56,7 +57,53 @@ def queue_finished_renders() -> int:
                 meta = metadata_writer.build(
                     platform, render["hook"], render["clip_text"], prof
                 )
-                scheduler.enqueue(c, render["id"], platform, meta)
+                scheduler.enqueue(c, render["id"], platform, meta, media_kind="clip")
+                added += 1
+    return added
+
+
+def queue_finished_twin_videos() -> int:
+    """Put every finished twin video into the same post queue a clip goes into.
+
+    A video he scripted and a moment the finder pulled out of a podcast are both
+    just a vertical MP4 by this point, and they go out through one scheduler so
+    the platform rate caps count them together. Two queues would each think they
+    had the whole daily allowance.
+    """
+    import channel as channel_profile
+
+    added = 0
+    prof = channel_profile.load(app.db_connection)
+    with closing(app.db_connection()) as c:
+        scheduler.setup_post_tables(c)
+        exists_table = c.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='twin_videos'"
+        ).fetchone()
+        if not exists_table:
+            return 0
+
+        videos = c.execute(
+            """
+            SELECT twin_videos.id, twin_videos.output_path,
+                   twin_scripts.hook, twin_scripts.title, twin_scripts.body
+            FROM twin_videos
+            LEFT JOIN twin_scripts ON twin_scripts.id = twin_videos.script_id
+            WHERE twin_videos.status = 'done' AND twin_videos.output_path IS NOT NULL
+            """
+        ).fetchall()
+
+        for video in videos:
+            for platform in PLATFORMS:
+                already = c.execute(
+                    "SELECT 1 FROM post_queue WHERE render_id = ? AND platform = ?"
+                    " AND media_kind = 'twin'",
+                    (video["id"], platform),
+                ).fetchone()
+                if already:
+                    continue
+                headline = video["hook"] or video["title"] or "New video"
+                meta = metadata_writer.build(platform, headline, video["body"] or "", prof)
+                scheduler.enqueue(c, video["id"], platform, meta, media_kind="twin")
                 added += 1
     return added
 
@@ -112,7 +159,7 @@ def post_due(live: bool = False) -> None:
 
 
 def process(live: bool = False) -> None:
-    added = queue_finished_renders()
+    added = queue_finished_renders() + queue_finished_twin_videos()
     if added:
         print(f"  queued {added} post(s)")
     post_due(live=live)

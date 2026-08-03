@@ -2,7 +2,7 @@
 import sys, tempfile
 from pathlib import Path
 
-sys.path.insert(0, r".")
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import app as clipforge
 
@@ -53,7 +53,7 @@ check("saving the channel redirects back", r.status_code == 200)
 check("channel remembers the handle", "@fightclips" in r.text)
 check("channel remembers what to avoid", "politics" in r.text)
 
-import profile as channel_profile
+import channel as channel_profile
 prof = channel_profile.load(clipforge.db_connection)
 ctx = channel_profile.scoring_context(prof)
 check("profile becomes scoring context for the clip finder", "fighter interviews" in ctx)

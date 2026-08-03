@@ -13,6 +13,7 @@ SUITES = [
     ("Posting limits + captions", "test_scheduler.py"),
     ("Posting, start to finish", "test_posting_e2e.py"),
     ("The dashboard pages", "test_dashboard.py"),
+    ("Your Twin — voice, script, layouts", "test_twin.py"),
 ]
 
 results = []
