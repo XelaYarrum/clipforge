@@ -264,6 +264,44 @@ def test_karaoke_captions() -> None:
     starts = [ln.split(",")[1] for ln in lines]
     check("caption timings move forwards", starts == sorted(starts), str(starts))
 
+    # THE ONE THAT MATTERED. Found by rendering a real video and finding a frame
+    # with no captions on it at all: each caption used to end when its word ended,
+    # so the screen went blank during every pause between words. A caption must
+    # hold until the next word starts.
+    gappy = [
+        {"start": 0.0, "end": 0.4, "word": " first"},
+        {"start": 0.4, "end": 0.8, "word": " second"},
+        {"start": 0.8, "end": 1.1, "word": " third"},
+        {"start": 2.6, "end": 3.0, "word": " after"},   # a 1.5s pause sits here
+        {"start": 3.0, "end": 3.4, "word": " the"},
+        {"start": 3.4, "end": 3.8, "word": " pause"},
+    ]
+    gap_lines = [ln for ln in compose._karaoke_events(gappy, 5.0).splitlines()
+                 if ln.startswith("Dialogue:")]
+
+    def seconds_of(stamp: str) -> float:
+        hours, minutes, rest = stamp.split(":")
+        return int(hours) * 3600 + int(minutes) * 60 + float(rest)
+
+    spans = [(seconds_of(ln.split(",")[1]), seconds_of(ln.split(",")[2])) for ln in gap_lines]
+
+    # The contract has two halves that pull against each other, so both are stated:
+    # captions bridge the ordinary pauses in speech, but a genuine silence is
+    # allowed to clear the screen rather than leave a stale line sitting there.
+    for earlier, later in zip(spans, spans[1:]):
+        blank = later[0] - earlier[1]
+        silence = later[0] - earlier[0]
+        if silence <= compose._MAX_HOLD_SECONDS:
+            check("captions bridge an ordinary pause between words",
+                  blank <= 0.001, f"blank for {blank:.2f}s across a {silence:.2f}s pause")
+        else:
+            check("a long silence clears the screen instead of holding a stale caption",
+                  blank > 0, f"held right through a {silence:.2f}s silence")
+
+    check("the caption held across the 1.5s pause for the capped time, not the whole gap",
+          abs((spans[2][1] - 1.1) - compose._MAX_HOLD_SECONDS) < 0.02,
+          f"held {spans[2][1] - 1.1:.2f}s, cap is {compose._MAX_HOLD_SECONDS}s")
+
     check("no words means no events", compose._karaoke_events([], 3.0) == "")
     check("words with no timings are skipped rather than crashing",
           compose._karaoke_events([{"word": "hi", "start": None, "end": None}], 3.0) == "")

@@ -75,6 +75,16 @@ CAPTION_STYLES = ("karaoke", "block")
 _ACTIVE_COLOUR = "&H92D342&"      # the app green, reversed
 _WORDS_PER_PHRASE = 3
 
+# A caption holds until the next word begins, so it never blinks out during the
+# ordinary pauses in speech. Without this the screen goes blank between words and
+# a frame sampled during a breath has no captions at all — which is exactly how
+# this was found, on a video that looked like the captions had failed entirely.
+#
+# The hold is capped: a genuine silence should not leave a stale line sitting
+# there, so anything longer than this just fades after a beat.
+_MAX_HOLD_SECONDS = 1.2
+_TAIL_SECONDS = 0.6
+
 
 def _ass_time(seconds: float) -> str:
     seconds = max(0.0, seconds)
@@ -99,14 +109,21 @@ def _karaoke_events(words: list[dict], seconds: float) -> str:
         phrase = spoken[index:index + _WORDS_PER_PHRASE]
         cleaned = [_ass_escape(w["word"].strip()) for w in phrase]
         for position, word in enumerate(phrase):
+            global_index = index + position
             start = max(0.0, float(word["start"]))
             end = min(seconds, float(word["end"]))
             if end <= start:
                 end = start + 0.12
-            # The last word of a phrase holds until the next phrase begins, so the
-            # caption never blinks out between words.
-            if position == len(phrase) - 1 and index + _WORDS_PER_PHRASE < len(spoken):
-                end = max(end, float(spoken[index + _WORDS_PER_PHRASE]["start"]))
+
+            # Hold until the next word starts, whether that word is in this phrase
+            # or the next one. This is what keeps captions on screen through the
+            # pauses in normal speech.
+            if global_index + 1 < len(spoken):
+                next_start = float(spoken[global_index + 1]["start"])
+                end = max(end, min(next_start, end + _MAX_HOLD_SECONDS))
+            else:
+                end = min(seconds, end + _TAIL_SECONDS)
+            end = min(end, seconds)
 
             rendered = []
             for other, text in enumerate(cleaned):
