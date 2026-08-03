@@ -115,7 +115,28 @@ def build(db, video_id: int, layout: str = "full", handle: str = "",
 
             provider = registry.face_provider()
             face_path = str(FACE_DIR / f"presenter_{video_id:05d}.mp4")
-            provider.render(plate_row["path"], audio_path, face_path)
+            try:
+                provider.render(plate_row["path"], audio_path, face_path)
+            except TwinError as error:
+                # Lip-sync needs a face it can find. A screen recording, a product
+                # shot, or b-roll of his hands has none, and that is a perfectly
+                # good video — it just cannot have its mouth re-driven.
+                #
+                # Installing LatentSync made it the preferred provider, and without
+                # this the whole video failed on any plate without a face. Falling
+                # back to plain footage keeps the video and loses only the lip-sync.
+                fallback = registry.fallback_face_provider(provider)
+                if fallback is None:
+                    raise
+                fallback.render(plate_row["path"], audio_path, face_path)
+                store.update_video(
+                    db, video_id,
+                    error_message=(
+                        f"Used your footage as-is: {provider.LABEL} couldn't work with that "
+                        f"plate ({str(error)[:120]}). The video is fine, the mouth just "
+                        "isn't synced."
+                    ),
+                )
             store.update_video(db, video_id, face_path=face_path)
 
         # ---------------------------------------------------------- render

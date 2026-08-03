@@ -206,6 +206,37 @@ def test_registry_never_auto_selects_a_paid_provider() -> None:
           all(p["ready"] or p["missing"] for p in catalogue["voice"] + catalogue["face"]))
 
 
+def test_face_provider_falls_back() -> None:
+    """Lip-sync failing on faceless footage must not lose the whole video.
+
+    Found live 2026-08-03: installing LatentSync made it the preferred face
+    provider, and the next render died with "Face not detected" because the plate
+    was a test pattern. A screen recording or b-roll would have done the same.
+    """
+    from twin.face_footage import FootageFace
+
+    faces = registry._all("face")
+    check("more than one face provider exists to fall back to", len(faces) >= 2, str(len(faces)))
+
+    lipsync = next((p for p in faces if p.NAME == "lipsync"), None)
+    if lipsync is not None:
+        fallback = registry.fallback_face_provider(lipsync)
+        check("a failing lip-sync provider has somewhere to fall back to", fallback is not None)
+        if fallback is not None:
+            check("the fallback is not the provider that just failed", fallback.NAME != "lipsync")
+            check("the fallback is free", fallback.COST == "free", fallback.COST)
+
+    # The footage provider needs no face, which is what makes it a valid fallback.
+    check("the footage provider accepts stills as well as video",
+          "image" in FootageFace().ACCEPTS)
+
+    # A provider must never fall back to itself, or a failure loops.
+    footage = FootageFace()
+    result = registry.fallback_face_provider(footage)
+    check("a provider never falls back to itself",
+          result is None or result.NAME != footage.NAME)
+
+
 def test_karaoke_captions() -> None:
     """The word-level caption track: every word appears, exactly one is live."""
     words = [
@@ -411,6 +442,7 @@ def main() -> int:
         test_qc_rejects_bad_output,
         test_footage_provider_is_honest,
         test_registry_never_auto_selects_a_paid_provider,
+        test_face_provider_falls_back,
         test_karaoke_captions,
         test_screen_recorder_is_honest,
         test_series_dedupes_angles,

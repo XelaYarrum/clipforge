@@ -107,6 +107,23 @@ def face_provider() -> Provider:
     return _select("face")
 
 
+def fallback_face_provider(failed: Provider) -> Provider | None:
+    """The next face provider that can run, when the chosen one could not.
+
+    Only free local ones, and never the one that just failed. This exists because
+    lip-sync depends on finding a face in the footage, and plenty of legitimate
+    plates have none — a screen recording, a product shot, b-roll of his hands.
+    Losing the whole video over that would be absurd when a provider that needs no
+    face is sitting right there.
+    """
+    for provider in _all("face"):
+        if provider.NAME == failed.NAME or provider.COST == "paid":
+            continue
+        if provider.available().ready:
+            return provider
+    return None
+
+
 def provider_by_name(kind: str, name: str) -> Provider:
     match = next((p for p in _all(kind) if p.NAME == name), None)
     if match is None:
